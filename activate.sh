@@ -55,7 +55,16 @@ if [ -f "resources/.env" ]; then
     echo "[OK] Exported environment variables from resources/.env (OPENAI_API_KEY, etc.)"
 fi
 
-# 4. Helper aliases
+# 4. Activate Python Virtual Environment
+###VENV_PATH="resources/prarob_yolo/.venv/bin/activate"
+###if [ -f "$VENV_PATH" ]; then
+###    source "$VENV_PATH"
+###    echo "[OK] Activated Python virtual environment ($VENV_PATH)"
+###else
+###    echo "[INFO] No Python virtual environment found at $VENV_PATH"
+###fi
+
+# 5. Helper aliases
 alias run_yolo="ros2 launch yolo_bringup yolo.launch.py use_tracking:=False device:=cpu"
 echo "[OK] Added 'run_yolo' alias to easily start the camera & YOLO node (tracking disabled to prevent crashes)"
 

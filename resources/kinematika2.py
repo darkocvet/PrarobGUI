@@ -15,10 +15,12 @@ ADDR_OPERATING_MODE   = 11
 ADDR_TORQUE_ENABLE    = 64
 ADDR_GOAL_POSITION    = 116
 ADDR_PRESENT_POSITION = 132
+ADDR_PROFILE_ACCELERATION = 108
+ADDR_PROFILE_VELOCITY = 112
 
 PROTOCOL_VERSION = 2.0
 BAUDRATE         = 1000000
-DEVICENAME       = '/dev/ttyUSB0'
+DEVICENAME       = '/dev/ttyUSB1'
 MOTOR_IDS        = [1, 2, 3]
 
 # Dynamixel XL430: 4096 koraka = 360°  →  11.3778 koraka/stupanj
@@ -31,7 +33,7 @@ HOME = {1: 3072, 2: 0, 3: 762}
 #  DIREKTNA KINEMATIKA
 def izracunaj_DK(rotacijskiKut, kutPrvogZgloba, kutDrugogZgloba):
     """Ulaz: kutevi u radijanima. Izlaz: (x, y, z) u mm."""
-    visina      = 95.0
+    visina      = 80.0
     prviClanak  = 96.0
     drugiClanak = 180.0
 
@@ -59,18 +61,20 @@ def izracunaj_DK(rotacijskiKut, kutPrvogZgloba, kutDrugogZgloba):
 
 
 #  INVERZNA KINEMATIKA
-def izracunaj_IK(x, y, z=0):
+def izracunaj_IK(x, y, z):
     """Ulaz: (x, y, z) u mm. Izlaz: kutevi u radijanima."""
-    d1 = 95.0
+    d1 = 80.0
     a2 = 96.0
     a3 = 180.0
 
     rotacijskiKut = np.arctan2(y, x)
     R = np.sqrt(x**2 + y**2)
+    
+    visinaRel = d1 - z 
 
-    A = 2 * d1 * a2
+    A = 2 * visinaRel * a2
     B = -2 * R * a2
-    C = a3**2 - a2**2 - d1**2 - R**2
+    C = a3**2 - a2**2 - visinaRel**2 - R**2
     Nazivnik = np.sqrt(A**2 + B**2)
 
     if abs(C / Nazivnik) > 1:
@@ -80,7 +84,7 @@ def izracunaj_IK(x, y, z=0):
     kutPrvogZgloba = gamma + np.arccos(C / Nazivnik)
 
     skala_sin = (R - a2 * np.sin(kutPrvogZgloba)) / a3
-    skala_cos = (-d1 - a2 * np.cos(kutPrvogZgloba)) / a3
+    skala_cos = (-visinaRel - a2 * np.cos(kutPrvogZgloba)) / a3
     kutDrugogZgloba = np.arctan2(skala_sin, skala_cos) - kutPrvogZgloba
     kutDrugogZgloba = np.arctan2(np.sin(kutDrugogZgloba), np.cos(kutDrugogZgloba))
 
@@ -98,10 +102,8 @@ def izracunaj_IK(x, y, z=0):
 SMJER = {1: 1, 2: 1, 3: -1}
 def kut_u_enkoder(motor_id, kut_deg):
     delta = int(round(kut_deg * KORACI_PO_STUPNJU * SMJER[motor_id]))
-    if motor_id == 3:
-        pozicija = HOME[motor_id] + delta  # bez % 4096
-    else:
-        pozicija = (HOME[motor_id] + delta) % 4096
+    # Removed % 4096 so the arm doesn't wrap around and swing violently!
+    pozicija = HOME[motor_id] + delta
     return pozicija
 
 
@@ -123,10 +125,13 @@ def inicijaliziraj_motore():
     for dxl_id in MOTOR_IDS:
         packetHandler.write1ByteTxRx(portHandler, dxl_id, ADDR_TORQUE_ENABLE, 0)
 
-        if dxl_id == 3:
-            packetHandler.write1ByteTxRx(portHandler, dxl_id, ADDR_OPERATING_MODE, 4)
-        else:
-            packetHandler.write1ByteTxRx(portHandler, dxl_id, ADDR_OPERATING_MODE, 3)
+        # Set all motors to Operating Mode 4 (Extended Position Control - Multi-turn)
+        # This prevents the motor from rejecting negative positions and wrapping around.
+        packetHandler.write1ByteTxRx(portHandler, dxl_id, ADDR_OPERATING_MODE, 4)
+
+        # Set Profile Velocity and Acceleration so the robot moves smoothly instead of snapping
+        packetHandler.write4ByteTxRx(portHandler, dxl_id, ADDR_PROFILE_VELOCITY, 60)      # Max speed limit
+        packetHandler.write4ByteTxRx(portHandler, dxl_id, ADDR_PROFILE_ACCELERATION, 20)  # Smooth acceleration curve
 
         result, error = packetHandler.write1ByteTxRx(portHandler, dxl_id, ADDR_TORQUE_ENABLE, 1)  # ← mora biti unutar for petlje
 
