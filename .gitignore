@@ -2,6 +2,6 @@
 __pycache__/
 *.pyc
 yolov8m.pt
-resources/build/
-resources/install/
-resources/log/
+build/
+install/
+log/
